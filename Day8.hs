@@ -82,11 +82,22 @@ execute :: Instruction -> Registers -> Registers
 execute (Instruction {..}) m | predicate (fromMaybe 0 $ M.lookup examine m) = M.insertWith (const update) target (update 0) m
                              | otherwise = m
   
-step1 :: [Instruction] -> Int
-step1 = maximum . M.elems . L.foldl' (flip execute) M.empty
+part1 :: [Instruction] -> Int
+part1 = maximum . M.elems . L.foldl' (flip execute) M.empty
+
+{-
+--- Part Two ---
+
+To be safe, the CPU also needs to know the highest value held in any register
+during this process so that it can decide how much memory to allocate to these
+operations. For example, in the above instructions, the highest value ever held
+was 10 (in register c after the third instruction was evaluated).
+-}
+
+part2 :: [Instruction] -> Int
+part2 = maximum . fmap (maximum . M.elems) . tail . L.scanl' (flip execute) M.empty
 
 main :: IO ()
-main = do
-  parse (instruction `endBy` newline) "Day8.input" <$> readFile "Day8.input" >>= \case
-    Left e -> fail (show e)
-    Right instructions -> print (step1 instructions)
+main = parse (instruction `endBy` newline) "Day8.input" <$> readFile "Day8.input" >>= \case
+  Left e -> fail (show e)
+  Right instructions -> print (part2 instructions)

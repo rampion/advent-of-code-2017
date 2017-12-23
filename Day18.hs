@@ -65,19 +65,23 @@ played sound) the first time a rcv instruction is executed with a non-zero
 value?
 -}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE BangPatterns #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 module Main where
 
 import Text.Parsec
 import Text.Parsec.String (parseFromFile)
 import qualified Data.Vector as V
 import qualified Data.Map.Strict as M
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 -- import Debug.Trace (traceShow)
 
 main :: IO ()
 main = parseFromFile program "Day18.input" >>= \case
   Left err -> fail $ show err
-  Right prog -> print $ part1 prog
+  Right prog -> do
+    print $ part1 prog
+    print $ part2 prog
 
 program :: Parsec String () Program
 program = V.fromList <$> instruction `endBy` newline
@@ -96,7 +100,7 @@ program = V.fromList <$> instruction `endBy` newline
 -- >>> parse instruction "example input" "set a 0"
 -- Right (SET 'a' (Right 0))
 -- >>> parse instruction "example input" "rcv a"
--- Right (RCV (Left 'a'))
+-- Right (RCV 'a')
 -- >>> parse instruction "example input" "jgz a -1"
 -- Right (JGZ (Left 'a') (Right (-1)))
 -- >>> parse instruction "example input" "set a 1"
@@ -110,7 +114,7 @@ instruction = choice
   ,       ADD <$> (string "add " *> register) <*> (char ' ' *> operand)
   , try $ MUL <$> (string "mul " *> register) <*> (char ' ' *> operand)
   ,       MOD <$> (string "mod " *> register) <*> (char ' ' *> operand)
-  ,       RCV <$> (string "rcv " *> operand)
+  ,       RCV <$> (string "rcv " *> register)
   ,       JGZ <$> (string "jgz " *> operand) <*> (char ' ' *> operand)
   ]
 
@@ -130,7 +134,7 @@ data Instruction
   | ADD Register Operand
   | MUL Register Operand
   | MOD Register Operand
-  | RCV Operand
+  | RCV Register
   | JGZ Operand Operand
   deriving (Show, Eq)
 
@@ -147,7 +151,7 @@ example = V.fromList
   , MOD 'a' $ Right 5
   , SND $ Left 'a'
   , SET 'a' $ Right 0
-  , RCV (Left 'a')
+  , RCV 'a'
   , JGZ (Left 'a') $ Right (-1)
   , SET 'a' $ Right 1
   , JGZ (Left 'a') $ Right (-2)
@@ -169,8 +173,8 @@ part1 prog = run M.empty 0 Nothing where
           ADD x y -> run (M.insertWith (+) x (val y) m) (i + 1) prev
           MUL x y -> run (M.adjust (* val y) x m ) (i + 1) prev
           MOD x y -> run (M.adjust (`rem` val y) x m) (i + 1) prev
-          RCV x | val x == 0 -> run m (i + 1) prev
-                | otherwise  -> prev
+          RCV x | m M.! x == 0 -> run m (i + 1) prev
+                | otherwise    -> prev
           JGZ x y | val x <= 0 -> run m (i + 1) prev
                   | otherwise  -> run m (i + val y) prev
 
@@ -229,25 +233,49 @@ Once both of your programs have terminated (regardless of what caused them to do
 so), how many times did program 1 send a value?
 -}
 
+latterExample :: Program
+latterExample = V.fromList
+  [ SND $ Right 1
+  , SND $ Right 2
+  , SND $ Left 'p'
+  , RCV 'a'
+  , RCV 'b'
+  , RCV 'c'
+  , RCV 'd'
+  ]
+
+-- |
+-- >>> part2 latterExample
+-- 3
 part2 :: Program -> Int
-part2 prog = length $ concat ys where
-  xs = run (M.singleton 'p' 0) 0 ys
-  ys = run (M.singleton 'p' 1) 0 xs
+part2 = length . snd . dual
+
+-- |
+-- >>> dual latterExample
+-- ([1,2,0],[1,2,1])
+dual :: Program -> ([Int], [Int])
+dual prog = (catMaybes xs, catMaybes ys) where
+  xs = run (M.insert 'P' 0 $ M.singleton 'p' 0) 0 0 ys
+  ys = run (M.insert 'P' 1 $ M.singleton 'p' 1) 0 0 xs
 
   -- batch them up by rcv
   --  x[0] - everything snd before the first rcv
-  run m i xs
+  run :: M.Map Register Value -> Int -> Int -> [Maybe Int] -> [Maybe Int]
+  run m !i !n zs
     | i < 0 || i >= V.length prog = []
-    | otherwise =
+    | otherwise = -- traceShow (i, prog V.! i, n, m) $
         let val (Left j) = fromMaybe 0 $ M.lookup j m
             val (Right v) = v
         in case prog V.! i of
-          SND x   -> run m (i + 1) (Just $ val x)
-          SET x y -> run (M.insert x (val y) m) (i + 1) prev
-          ADD x y -> run (M.insertWith (+) x (val y) m) (i + 1) prev
-          MUL x y -> run (M.adjust (* val y) x m ) (i + 1) prev
-          MOD x y -> run (M.adjust (`rem` val y) x m) (i + 1) prev
-          RCV x | val x == 0 -> run m (i + 1) prev
-                | otherwise  -> prev
-          JGZ x y | val x <= 0 -> run m (i + 1) prev
-                  | otherwise  -> run m (i + val y) prev
+          SND x   -> Just (val x) : run m (i + 1) (n + 1) zs
+          SET x y -> run (M.insert x (val y) m) (i + 1) n zs
+          ADD x y -> run (M.insertWith (+) x (val y) m) (i + 1) n zs
+          MUL x y -> run (M.adjust (* val y) x m ) (i + 1) n zs
+          MOD x y -> run (M.adjust (`rem` val y) x m) (i + 1) n zs
+          RCV x   -> let go 0 (Nothing: ~[])  = []
+                         go n (Just y:zs)     = run (M.insert x y m) (i + 1) n zs
+                         go n (Nothing:zs)    = go (n - 1) zs
+                         go _ []              = []
+                      in Nothing : go n zs
+          JGZ x y | val x <= 0 -> run m (i + 1) n zs
+                  | otherwise  -> run m (i + val y) n zs

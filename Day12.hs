@@ -1,356 +1,105 @@
+{-# LANGUAGE LambdaCase #-}
 module Main where
 {-
---- Day 13: Packet Scanners ---
+--- Day 12: Digital Plumber ---
 
-You need to cross a vast firewall. The firewall consists of several layers, each
-with a security scanner that moves back and forth across the layer. To succeed,
-you must not be detected by a scanner.
+Walking along the memory banks of the stream, you find a small village that is
+experiencing a little confusion: some programs can't communicate with each
+other.
 
-By studying the firewall briefly, you are able to record (in your puzzle input)
-the depth of each layer and the range of the scanning area for the scanner
-within it, written as depth: range. Each layer has a thickness of exactly 1. A
-layer at depth 0 begins immediately inside the firewall; a layer at depth 1
-would start immediately after that.
+Programs in this village communicate using a fixed system of pipes. Messages
+are passed between programs using these pipes, but most programs aren't
+connected to each other directly. Instead, programs pass messages between each
+other until the message reaches the intended recipient.
 
-For example, suppose you've recorded the following:
+For some reason, though, some of these messages aren't ever reaching their
+intended recipient, and the programs suspect that some pipes are missing. They
+would like you to investigate.
 
-0: 3
-1: 2
-4: 4
-6: 4
+You walk through the village and record the ID of each program and the IDs with
+which it can communicate directly (your puzzle input). Each program has one or
+more programs with which it can communicate, and these pipes are bidirectional;
+if 8 says it can communicate with 11, then 11 will say it can communicate with
+8.
 
-This means that there is a layer immediately inside the firewall (with range 3),
-a second layer immediately after that (with range 2), a third layer which begins
-at depth 4 (with range 4), and a fourth layer which begins at depth 6 (also with
-range 4). Visually, it might look like this:
+You need to figure out how many programs are in the group that contains program
+ID 0.
 
- 0   1   2   3   4   5   6
-[ ] [ ] ... ... [ ] ... [ ]
-[ ] [ ]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
+For example, suppose you go door-to-door like a travelling salesman and record the following list:
 
-Within each layer, a security scanner moves back and forth within its range.
-Each security scanner starts at the top and moves down until it reaches the
-bottom, then moves up until it reaches the top, and repeats. A security scanner
-takes one picosecond to move one step. Drawing scanners as S, the first few
-picoseconds look like this:
+0 <-> 2
+1 <-> 1
+2 <-> 0, 3, 4
+3 <-> 2, 4
+4 <-> 2, 3, 6
+5 <-> 6
+6 <-> 4, 5
 
+In this example, the following programs are in the group that contains program ID 0:
 
-Picosecond 0:
- 0   1   2   3   4   5   6
-[S] [S] ... ... [S] ... [S]
-[ ] [ ]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
+    Program 0 by definition.
+    Program 2, directly connected to program 0.
+    Program 3 via program 2.
+    Program 4 via program 2.
+    Program 5 via programs 6, then 4, then 2.
+    Program 6 via programs 4, then 2.
 
-Picosecond 1:
- 0   1   2   3   4   5   6
-[ ] [ ] ... ... [ ] ... [ ]
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
+Therefore, a total of 6 programs are in this group; all but program 1, which
+has a pipe that connects it to itself.
 
-Picosecond 2:
- 0   1   2   3   4   5   6
-[ ] [S] ... ... [ ] ... [ ]
-[ ] [ ]         [ ]     [ ]
-[S]             [S]     [S]
-                [ ]     [ ]
-
-Picosecond 3:
- 0   1   2   3   4   5   6
-[ ] [ ] ... ... [ ] ... [ ]
-[S] [S]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [S]     [S]
-
-Your plan is to hitch a ride on a packet about to move through the firewall. The
-packet will travel along the top of each layer, and it moves at one layer per
-picosecond. Each picosecond, the packet moves one layer forward (its first move
-takes it into layer 0), and then the scanners move one step. If there is a
-scanner at the top of the layer as your packet enters it, you are caught. (If a
-scanner moves into the top of its layer while you are there, you are not caught:
-it doesn't have time to notice you before you leave.) If you were to do this in
-the configuration above, marking your current position with parentheses, your
-passage through the firewall would look like this:
-
-Initial state:
- 0   1   2   3   4   5   6
-[S] [S] ... ... [S] ... [S]
-[ ] [ ]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
-Picosecond 0:
- 0   1   2   3   4   5   6
-(S) [S] ... ... [S] ... [S]
-[ ] [ ]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-( ) [ ] ... ... [ ] ... [ ]
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
-
-Picosecond 1:
- 0   1   2   3   4   5   6
-[ ] ( ) ... ... [ ] ... [ ]
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[ ] (S) ... ... [ ] ... [ ]
-[ ] [ ]         [ ]     [ ]
-[S]             [S]     [S]
-                [ ]     [ ]
-
-
-Picosecond 2:
- 0   1   2   3   4   5   6
-[ ] [S] (.) ... [ ] ... [ ]
-[ ] [ ]         [ ]     [ ]
-[S]             [S]     [S]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[ ] [ ] (.) ... [ ] ... [ ]
-[S] [S]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [S]     [S]
-
-
-Picosecond 3:
- 0   1   2   3   4   5   6
-[ ] [ ] ... (.) [ ] ... [ ]
-[S] [S]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [S]     [S]
-
- 0   1   2   3   4   5   6
-[S] [S] ... (.) [ ] ... [ ]
-[ ] [ ]         [ ]     [ ]
-[ ]             [S]     [S]
-                [ ]     [ ]
-
-
-Picosecond 4:
- 0   1   2   3   4   5   6
-[S] [S] ... ... ( ) ... [ ]
-[ ] [ ]         [ ]     [ ]
-[ ]             [S]     [S]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[ ] [ ] ... ... ( ) ... [ ]
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
-
-Picosecond 5:
- 0   1   2   3   4   5   6
-[ ] [ ] ... ... [ ] (.) [ ]
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[ ] [S] ... ... [S] (.) [S]
-[ ] [ ]         [ ]     [ ]
-[S]             [ ]     [ ]
-                [ ]     [ ]
-
-
-Picosecond 6:
- 0   1   2   3   4   5   6
-[ ] [S] ... ... [S] ... (S)
-[ ] [ ]         [ ]     [ ]
-[S]             [ ]     [ ]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[ ] [ ] ... ... [ ] ... ( )
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
-In this situation, you are caught in layers 0 and 6, because your packet entered
-the layer when its scanner was at the top when you entered it. You are not
-caught in layer 1, since the scanner moved into the top of the layer once you
-were already there.
-
-The severity of getting caught on a layer is equal to its depth multiplied by
-its range. (Ignore layers in which you do not get caught.) The severity of the
-whole trip is the sum of these values. In the example above, the trip severity
-is 0*3 + 6*4 = 24.
-
-Given the details of the firewall you've recorded, if you leave immediately,
-what is the severity of your whole trip?
+How many programs are in the group that contains program ID 0?
 -}
+import Control.Monad.State
 import Text.Parsec
-import Text.Parsec.String
-import Data.Maybe (fromJust)
-import Data.List (find)
+import Text.Parsec.String (parseFromFile)
+import qualified Data.Set as S
+import qualified Data.IntMap as M
 
 main :: IO ()
-main = do
-  Right ps <- parseFromFile firewall "Day12.input"
-  print $ minDelay ps
+main = parseFromFile graph "Day12.input" >>= \case
+  Left e -> fail (show e)
+  Right g -> print . length $ components g
+
+type Graph = M.IntMap [Int]
+
+graph :: Parsec String () Graph
+graph = M.fromList <$> (adjacency `endBy` char '\n') where
+  adjacency = (,) <$> integer <* string " <-> " <*> (integer `sepBy` string ", ")
+  integer = read <$> many1 digit
 
 -- |
--- >>> parse firewall "example_input" example_input 
--- Right [(0,3),(1,2),(4,4),(6,4)]
-firewall :: Parsec String () [(Int, Int)]
-firewall = ((,) <$> number <* string ": " <*> number) `endBy` char '\n'
-  where number = read <$> many1 digit
+-- >>> g = M.fromList [(0,[2]),(1,[1]),(2,[0,3,4]),(3,[2,4]),(4,[2,3,6]),(5,[6]),(6,[4,5])]
+-- >>> bfs 0 g
+-- [0,2,3,4,6,5]
+bfs :: Int -> Graph -> [Int]
+bfs = \seed g -> let queue = seed : search g (S.singleton seed) 1 queue in queue where
+  search _ _ 0 ~[] = []
+  search g seen n (x:xs) = 
+    let (unseen, seen') = filterM (\y -> gets (not . S.member y) <* modify (S.insert y)) (g M.! x) `runState` seen
+    in unseen ++ search g seen' (n - 1 + length unseen) xs
 
-example_input :: String
-example_input = "0: 3\n\
-                \1: 2\n\
-                \4: 4\n\
-                \6: 4\n"
 
--- |
--- >>> severity [(0,3),(1,2),(4,4),(6,4)]
--- 24
-severity :: [(Int,Int)] -> Int
-severity ps = sum [ depth * range | (depth,range) <- hits 0 ps ]
-
-hits :: Int -> [(Int,Int)] -> [(Int, Int)]
-hits = \delay ps -> filter (hit delay) ps where
-  hit delay (depth,range) = (delay + depth) `rem` (2 * range - 2) == 0
 {-
 --- Part Two ---
 
-Now, you need to pass through the firewall without being caught - easier said
-than done.
+There are more programs than just the ones in the group containing program ID
+0. The rest of them have no way of reaching that group, and still might have no
+way of reaching each other.
 
-You can't control the speed of the packet, but you can delay it any number of
-picoseconds. For each picosecond you delay the packet before beginning your
-trip, all security scanners move one step. You're not in the firewall during
-this time; you don't enter layer 0 until you stop delaying the packet.
+A group is a collection of programs that can all communicate via pipes either
+directly or indirectly. The programs you identified just a moment ago are all
+part of the same group. Now, they would like you to determine the total number
+of groups.
 
-In the example above, if you delay 10 picoseconds (picoseconds 0 - 9), you won't
-get caught:
+In the example above, there were 2 groups: one consisting of programs
+0,2,3,4,5,6, and the other consisting solely of program 1.
 
-State after delaying:
- 0   1   2   3   4   5   6
-[ ] [S] ... ... [ ] ... [ ]
-[ ] [ ]         [ ]     [ ]
-[S]             [S]     [S]
-                [ ]     [ ]
-
-Picosecond 10:
- 0   1   2   3   4   5   6
-( ) [S] ... ... [ ] ... [ ]
-[ ] [ ]         [ ]     [ ]
-[S]             [S]     [S]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-( ) [ ] ... ... [ ] ... [ ]
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
-
-Picosecond 11:
- 0   1   2   3   4   5   6
-[ ] ( ) ... ... [ ] ... [ ]
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[S] (S) ... ... [S] ... [S]
-[ ] [ ]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
-
-Picosecond 12:
- 0   1   2   3   4   5   6
-[S] [S] (.) ... [S] ... [S]
-[ ] [ ]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[ ] [ ] (.) ... [ ] ... [ ]
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
-
-Picosecond 13:
- 0   1   2   3   4   5   6
-[ ] [ ] ... (.) [ ] ... [ ]
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[ ] [S] ... (.) [ ] ... [ ]
-[ ] [ ]         [ ]     [ ]
-[S]             [S]     [S]
-                [ ]     [ ]
-
-
-Picosecond 14:
- 0   1   2   3   4   5   6
-[ ] [S] ... ... ( ) ... [ ]
-[ ] [ ]         [ ]     [ ]
-[S]             [S]     [S]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[ ] [ ] ... ... ( ) ... [ ]
-[S] [S]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [S]     [S]
-
-
-Picosecond 15:
- 0   1   2   3   4   5   6
-[ ] [ ] ... ... [ ] (.) [ ]
-[S] [S]         [ ]     [ ]
-[ ]             [ ]     [ ]
-                [S]     [S]
-
- 0   1   2   3   4   5   6
-[S] [S] ... ... [ ] (.) [ ]
-[ ] [ ]         [ ]     [ ]
-[ ]             [S]     [S]
-                [ ]     [ ]
-
-
-Picosecond 16:
- 0   1   2   3   4   5   6
-[S] [S] ... ... [ ] ... ( )
-[ ] [ ]         [ ]     [ ]
-[ ]             [S]     [S]
-                [ ]     [ ]
-
- 0   1   2   3   4   5   6
-[ ] [ ] ... ... [ ] ... ( )
-[S] [S]         [S]     [S]
-[ ]             [ ]     [ ]
-                [ ]     [ ]
-
-Because all smaller delays would get you caught, the fewest number of
-picoseconds you would need to delay to get through safely is 10.
-
-What is the fewest number of picoseconds that you need to delay the packet to
-pass through the firewall without being caught?
+How many groups are there in total?
 -}
 
--- |
--- >>> minDelay [(0,3),(1,2),(4,4),(6,4)]
--- 10
-minDelay :: [(Int,Int)] -> Int
-minDelay ps = fromJust $ find (\n -> null $ hits n ps) [0..]
+components :: Graph -> [Int]
+components = \g -> search g (M.keys g) S.empty where
+  search g [] seen = []
+  search g (x : xs) seen
+    | x `S.member` seen = search g xs seen
+    | otherwise         = x : search g xs (foldr S.insert seen $ bfs x g)
