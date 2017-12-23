@@ -9,4 +9,7 @@ test-%: %.hs
 run-%: bin/%
 	@$<
 
-.PHONY: all test-%
+clean:
+	rm -f *.hi *.o
+
+.PHONY: all test-% clean
